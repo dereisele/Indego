@@ -57,6 +57,8 @@ from .const import (
     ENTITY_ONLINE,
     ENTITY_RUNTIME,
     ENTITY_UPDATE_AVAILABLE,
+    ENTITY_XPOSITION,
+    ENTITY_YPOSITION,
     INDEGO_COMPONENTS,
     SENSOR_TYPE,
     SERVICE_NAME_COMMAND,
@@ -171,7 +173,7 @@ ENTITY_DEFINITIONS = {
         CONF_NAME: "last completed",
         CONF_ICON: "mdi:cash-100",
         CONF_DEVICE_CLASS: DEVICE_CLASS_TIMESTAMP,
-        CONF_UNIT_OF_MEASUREMENT: "ISO8601",
+        CONF_UNIT_OF_MEASUREMENT: None,
         CONF_ATTR: [],
     },
     ENTITY_NEXT_MOW: {
@@ -179,7 +181,7 @@ ENTITY_DEFINITIONS = {
         CONF_NAME: "next mow",
         CONF_ICON: "mdi:chevron-right",
         CONF_DEVICE_CLASS: DEVICE_CLASS_TIMESTAMP,
-        CONF_UNIT_OF_MEASUREMENT: "ISO8601",
+        CONF_UNIT_OF_MEASUREMENT: None,
         CONF_ATTR: [],
     },
     ENTITY_MOWING_MODE: {
@@ -201,6 +203,24 @@ ENTITY_DEFINITIONS = {
             "total_charging_time_h",
             "total_operation_time_h",
         ],
+    },
+    ENTITY_XPOSITION: {
+        CONF_TYPE: SENSOR_TYPE,
+        CONF_NAME: "xposition",
+        CONF_ICON: "mdi:crosshairs-gps",
+        # CONF_ICON: "mdi:crosshairs",
+        CONF_DEVICE_CLASS: None,
+        CONF_UNIT_OF_MEASUREMENT: None,
+        CONF_ATTR: [],
+    },
+    ENTITY_YPOSITION: {
+        CONF_TYPE: SENSOR_TYPE,
+        CONF_NAME: "yposition",
+        CONF_ICON: "mdi:crosshairs-gps",
+        # CONF_ICON: "mdi:crosshairs",
+        CONF_DEVICE_CLASS: None,
+        CONF_UNIT_OF_MEASUREMENT: None,
+        CONF_ATTR: [],
     },
 }
 
@@ -450,6 +470,8 @@ class IndegoHub:
             self.entities[ENTITY_BATTERY].charging = (
                 True if self.indego.state_description_detail == "Charging" else False
             )
+            self.entities[ENTITY_XPOSITION].state = self.indego.state.xPos
+            self.entities[ENTITY_YPOSITION].state = self.indego.state.yPos
             # dependent attribute updates
             self.entities[ENTITY_MOWER_STATE].add_attribute(
                 {
@@ -561,4 +583,3 @@ class IndegoHub:
             self.entities[ENTITY_LAWN_MOWED].add_attribute(
                 {"next_mow": self.indego.next_mow.strftime("%Y-%m-%d %H:%M")}
             )
-
