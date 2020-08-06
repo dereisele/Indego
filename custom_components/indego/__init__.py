@@ -305,6 +305,7 @@ class IndegoHub:
         self.indego = IndegoAsyncClient(self._username, self._password, self._serial)
         self.entities = {}
         self.refresh_state_task = None
+        self.refresh_1m_remover = None
         self.refresh_10m_remover = None
         self.refresh_24h_remover = None
         self._shutdown = False
@@ -349,7 +350,9 @@ class IndegoHub:
         """Do the initial update of all entities."""
         _LOGGER.debug("Starting initial update.")
         self.refresh_state_task = self._hass.async_create_task(self.refresh_state())
-        await asyncio.gather(*[self.refresh_10m(_), self.refresh_24h(_)])
+        await asyncio.gather(
+            *[self.refresh_1m(_), self.refresh_10m(_), self.refresh_24h(_)]
+        )
         try:
             _LOGGER.debug("Refreshing initial operating data.")
             await self._update_operating_data()
@@ -362,6 +365,8 @@ class IndegoHub:
         if self.refresh_state_task:
             self.refresh_state_task.cancel()
             await self.refresh_state_task
+        if self.refresh_1m_remover:
+            self.refresh_1m_remover()
         if self.refresh_10m_remover:
             self.refresh_10m_remover()
         if self.refresh_24h_remover:
@@ -385,6 +390,7 @@ class IndegoHub:
                     await self._update_operating_data()
                 except Exception as e:
                     _LOGGER.info("Update operating data got an exception: %s", e)
+
             if self.indego.state.error != self._latest_alert:
                 self._latest_alert = self.indego.state.error
                 try:
@@ -393,6 +399,32 @@ class IndegoHub:
                 except Exception as e:
                     _LOGGER.info("Update alert got an exception: %s", e)
         self.refresh_state_task = self._hass.async_create_task(self.refresh_state())
+
+    async def refresh_1m(self, _):
+        """Refresh Indego sensors every 1m."""
+        _LOGGER.debug("Refreshing 1m.")
+        if self.indego.state:
+            state = self.indego.state.state
+            _LOGGER.debug("State is true!")
+            if (500 <= state <= 799) or (state in (257, 260)):
+                _LOGGER.debug("State is active, update position!")
+                results = await self._update_state_force()
+                # for res in results:
+                #    if res:
+                #        try:
+                #            raise res
+                #        except Exception as e:
+                #            _LOGGER.warning("Uncaught error: %s on index: %s", e, index)
+                #    index += 1
+        else:
+            _LOGGER.debug("No not ok!")
+        _LOGGER.debug("Refreshing 1m. After!")
+        next_refresh = 60
+        index = 0
+        _LOGGER.debug("Setting new refresh for 1m!")
+        self.refresh_1m_remover = async_call_later(
+            self._hass, next_refresh, self.refresh_1m
+        )
 
     async def refresh_10m(self, _):
         """Refresh Indego sensors every 10m."""
@@ -504,6 +536,73 @@ class IndegoHub:
                     "total_operation_time_h": self.indego.state.runtime.total.operate,
                     "total_mowing_time_h": self.indego.state.runtime.total.cut,
                     "total_charging_time_h": self.indego.state.runtime.total.charge,
+                }
+            )
+
+    async def _update_state_force(self):
+        await self.indego.update_state(force=True)
+        # dependent state updates
+        if self._shutdown:
+            return
+        if self.indego.state:
+            self.entities[ENTITY_MOWER_STATE].state = self.indego.state_description
+            self.entities[
+                ENTITY_MOWER_STATE_DETAIL
+            ].state = self.indego.state_description_detail
+            self.entities[ENTITY_LAWN_MOWED].state = self.indego.state.mowed
+            self.entities[ENTITY_RUNTIME].state = self.indego.state.runtime.total.cut
+
+            self.entities[ENTITY_BATTERY].charging = (
+                True if self.indego.state_description_detail == "Charging" else False
+            )
+            self.entities[ENTITY_XPOSITION].state = self.indego.state.xPos
+            self.entities[ENTITY_YPOSITION].state = self.indego.state.yPos
+            # dependent attribute updates
+            self.entities[ENTITY_MOWER_STATE].add_attribute(
+                {
+                    "last_updated": homeassistant.util.dt.as_local(utcnow()).strftime(
+                        "%Y-%m-%d %H:%M"
+                    )
+                }
+            )
+            self.entities[ENTITY_MOWER_STATE_DETAIL].add_attribute(
+                {
+                    "last_updated": homeassistant.util.dt.as_local(utcnow()).strftime(
+                        "%Y-%m-%d %H:%M"
+                    ),
+                    "state_number": self.indego.state.state,
+                    "state_description": self.indego.state_description_detail,
+                }
+            )
+            self.entities[ENTITY_LAWN_MOWED].add_attribute(
+                {
+                    "last_updated": homeassistant.util.dt.as_local(utcnow()).strftime(
+                        "%Y-%m-%d %H:%M"
+                    ),
+                    "last_session_operation_min": self.indego.state.runtime.session.operate,
+                    "last_session_cut_min": self.indego.state.runtime.session.cut,
+                    "last_session_charge_min": self.indego.state.runtime.session.charge,
+                }
+            )
+            self.entities[ENTITY_RUNTIME].add_attribute(
+                {
+                    "total_operation_time_h": self.indego.state.runtime.total.operate,
+                    "total_mowing_time_h": self.indego.state.runtime.total.cut,
+                    "total_charging_time_h": self.indego.state.runtime.total.charge,
+                }
+            )
+            self.entities[ENTITY_XPOSITION].add_attribute(
+                {
+                    "last_updated": homeassistant.util.dt.as_local(utcnow()).strftime(
+                        "%Y-%m-%d %H:%M"
+                    )
+                }
+            )
+            self.entities[ENTITY_YPOSITION].add_attribute(
+                {
+                    "last_updated": homeassistant.util.dt.as_local(utcnow()).strftime(
+                        "%Y-%m-%d %H:%M"
+                    )
                 }
             )
 
